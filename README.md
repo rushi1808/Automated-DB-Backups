@@ -1,2 +1,2 @@
 ## Project URL
-https://github.com/rushikeshpatil/automated-db-backup
+https://github.com/rushi1808/automated-db-backup
