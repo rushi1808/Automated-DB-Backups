@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - DB Guardian</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <script>
+        async function runAction(endpoint) {
+            const btn = event.target;
+            const originalText = btn.innerText;
+            btn.innerText = "Processing...";
+            btn.disabled = true;
+            try {
+                const response = await fetch(endpoint, { method: 'POST' });
+                const result = await response.json();
+                alert(result.message);
+                if (endpoint === '/api/run_backup') {
+                    location.reload(); // Refresh to show new backup
+                }
+            } catch (error) {
+                alert("Action failed. Check console.");
+            } finally {
+                btn.innerText = originalText;
+                btn.disabled = false;
+                fetchLogs(); // refresh logs
+            }
+        }
+
+        async function uploadFile(event) {
+            event.preventDefault();
+            const form = document.getElementById('uploadForm');
+            const btn = document.getElementById('uploadBtn');
+            const data = new FormData(form);
+            btn.innerText = "Uploading...";
+            btn.disabled = true;
+            try {
+                const response = await fetch('/api/upload_file', { method: 'POST', body: data });
+                const result = await response.json();
+                alert(result.message);
+                location.reload();
+            } catch (error) {
+                alert("Upload failed.");
+            } finally {
+                btn.innerText = "Upload & Analyze";
+                btn.disabled = false;
+            }
+        }
+
+        async function submitLink(event) {
+            event.preventDefault();
+            const form = document.getElementById('linkForm');
+            const btn = document.getElementById('linkBtn');
+            const data = new FormData(form);
+            btn.innerText = "Saving...";
+            btn.disabled = true;
+            try {
+                const response = await fetch('/api/submit_link', { method: 'POST', body: data });
+                const result = await response.json();
+                alert(result.message);
+                location.reload();
+            } catch (error) {
+                alert("Link submission failed.");
+            } finally {
+                btn.innerText = "Save Link";
+                btn.disabled = false;
+            }
+        }
+
+        async function fetchLogs() {
+            try {
+                const response = await fetch('/api/logs');
+                const result = await response.json();
+                const container = document.getElementById('log-container');
+                container.textContent = result.logs;
+                container.scrollTop = container.scrollHeight;
+            } catch (e) {
+                console.error("Failed to fetch logs");
+            }
+        }
+
+        // Auto-refresh logs every 5 seconds
+        setInterval(fetchLogs, 5000);
+        window.onload = fetchLogs;
+    </script>
+</head>
+<body style="display: block;">
+    <div class="dashboard-layout">
+        <div class="main-content">
+            <div class="panel">
+                <div class="header">
+                    <h2>Database Backups History</h2>
+                    <div>
+                        <button class="btn btn-sm" onclick="runAction('/api/run_backup')">Run Backup Now</button>
+                        <button class="btn btn-sm btn-danger" onclick="runAction('/api/run_anomaly')">Run Anomaly Check</button>
+                    </div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Filename</th>
+                            <th>Size (KB)</th>
+                            <th>Created Timestamp</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for backup in backups %}
+                        <tr>
+                            <td>{{ backup.name }}</td>
+                            <td>{{ backup.size_kb }}</td>
+                            <td>{{ backup.modified }}</td>
+                            <td><span class="status-badge">Encrypted</span></td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="4" style="text-align: center; color: var(--text-muted);">No backups found.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- SECURE VAULT SECTION -->
+            <div class="panel">
+                <div class="header">
+                    <h2>Secure Data Vault (ML Protected)</h2>
+                </div>
+                
+                <div style="display: flex; gap: 2rem; margin-bottom: 2rem;">
+                    <!-- File Upload -->
+                    <form id="uploadForm" onsubmit="uploadFile(event)" style="flex: 1; padding: 1rem; border: 1px dashed var(--border); border-radius: 8px;">
+                        <h4 style="margin-bottom: 1rem;">Upload File</h4>
+                        <input type="file" name="vault_file" required style="margin-bottom: 1rem; width: 100%; border: none;">
+                        <button type="submit" id="uploadBtn" class="btn btn-sm">Upload & Analyze</button>
+                    </form>
+
+                    <!-- Link Submission -->
+                    <form id="linkForm" onsubmit="submitLink(event)" style="flex: 1; padding: 1rem; border: 1px dashed var(--border); border-radius: 8px;">
+                        <h4 style="margin-bottom: 1rem;">Submit Link</h4>
+                        <input type="url" name="vault_link" placeholder="https://..." required style="margin-bottom: 1rem; padding: 0.5rem; width: 100%; background: var(--bg-color); border: 1px solid var(--border); color: white; border-radius: 4px;">
+                        <button type="submit" id="linkBtn" class="btn btn-sm">Save Link</button>
+                    </form>
+                </div>
+
+                <!-- Vault Table -->
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Filename / Link</th>
+                            <th>Type</th>
+                            <th>ML Sensitivity</th>
+                            <th>Encryption Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in vault %}
+                        <tr>
+                            <td style="word-break: break-all;">{{ item.filename }}</td>
+                            <td>{{ item.file_type }}</td>
+                            <td>
+                                {% if item.is_sensitive %}
+                                <span class="status-badge" style="background-color: rgba(215, 58, 73, 0.2); color: var(--danger);">Sensitive Data</span>
+                                {% else %}
+                                <span class="status-badge">Safe (Public)</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if item.is_encrypted %}
+                                <span class="status-badge">AES-256 Encrypted</span>
+                                {% else %}
+                                <span style="font-size: 0.8rem; color: var(--text-muted);">Plaintext</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="4" style="text-align: center; color: var(--text-muted);">Vault is empty.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="panel" style="flex: 1;">
+                <h2>System Logs</h2>
+                <div class="logs-container" id="log-container">
+                    Loading logs...
+                </div>
+            </div>
+        </div>
+        
+        <div class="sidebar">
+            <div class="panel">
+                <div class="header">
+                    <h3>Quick Actions</h3>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 1rem;">
+                    <button class="btn btn-sm btn-danger" onclick="window.location.href='/logout'">Logout Securely</button>
+                </div>
+            </div>
+            <div class="panel">
+                <h3>System Status</h3>
+                <p style="margin-top: 1rem; color: var(--text-muted); font-size: 0.9rem;">
+                    <strong>Scheduler:</strong> Running<br>
+                    <strong>Encryption:</strong> AES-256 Active<br>
+                    <strong>ML Engine:</strong> Isolation Forest Enabled<br>
+                    <strong>Vault AI:</strong> NLP Classification Active
+                </p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
